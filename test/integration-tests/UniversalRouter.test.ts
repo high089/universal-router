@@ -256,6 +256,39 @@ describe('UniversalRouter', () => {
         expect(await daiContract.balanceOf(alice.address)).to.not.eq(balanceOfDaiBefore)
       })
 
+      it('completes a trade for ETH --> WETH --> ERC20 -- WETH', async () => {
+        const balanceOfDaiBefore = await daiContract.balanceOf(alice.address)
+        const minAmountOut = ethers.utils.parseEther('0.000000000000001');
+
+        const wethAmount = ethers.utils.parseEther('1')
+
+        planner.addCommand(CommandType.WRAP_ETH, [alice.address, wethAmount])
+        planner.addCommand(CommandType.V2_SWAP_EXACT_IN, [
+          alice.address,
+          wethAmount,
+          minAmountOut,
+          [WETH.address, DAI.address],
+          SOURCE_MSG_SENDER,
+        ])
+        // TODO: Estimate the amount of DAI that will be received for the WETH swap???
+        const estimatedAmountReceived = BigNumber.from(10000)
+        const slippage = 0.01; // 1% slippage
+        const amountToSend = estimatedAmountReceived.sub(estimatedAmountReceived.mul(slippage).div(100))
+
+        // swap DAI for WETH
+        planner.addCommand(CommandType.V2_SWAP_EXACT_IN, [
+          alice.address,
+          amountToSend,
+          minAmountOut,
+          [DAI.address, WETH.address],
+          SOURCE_MSG_SENDER,
+        ])
+        const { commands, inputs } = planner
+        const result = await router['execute(bytes,bytes[],uint256)'](commands, inputs, DEADLINE, {value: wethAmount})
+        await result.wait()
+        expect(await daiContract.balanceOf(alice.address)).to.not.eq(balanceOfDaiBefore)
+      })
+
       // it('completes a trade for ERC20 --> ETH --> Seaport NFT', async () => {
       //   const maxAmountIn = expandTo18DecimalsBN(100_000)
       //   const tokenId = advancedOrder.parameters.offer[0].identifierOrCriteria
